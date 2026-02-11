@@ -1,5 +1,7 @@
 package domains
 
+import "math"
+
 // TaxCalculator is the contract for the tax calculation strategy
 type TaxCalculator interface {
 	CalculateAnnualTax(salary float64) float64
@@ -25,5 +27,5 @@ func (s *ProgressiveTaxStrategy) CalculateAnnualTax(salary float64) float64 {
 			totalTax += (upper - b.Min + 1) * b.Rate
 		}
 	}
-	return totalTax
+	return math.Round(totalTax*100) / 100
 }

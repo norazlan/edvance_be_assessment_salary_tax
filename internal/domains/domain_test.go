@@ -48,6 +48,11 @@ func TestProgressiveTaxStrategy_CalculateAnnualTax(t *testing.T) {
 			salary:   1000000,
 			expected: 368000,
 		},
+		{
+			name:     "salary 93427.60 should return 14028.28 tax",
+			salary:   93427.60,
+			expected: 14028.28,
+		},
 	}
 
 	for _, tt := range tests {
