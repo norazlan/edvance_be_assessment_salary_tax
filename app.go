@@ -9,6 +9,7 @@ import (
 	"edvance-assessment/config"
 	"edvance-assessment/internal/domains"
 	"edvance-assessment/internal/handlers"
+	"edvance-assessment/internal/services"
 	"edvance-assessment/pkg"
 
 	"github.com/gofiber/fiber/v3"
@@ -40,14 +41,56 @@ func main() {
 		log.Fatalf("Failed to load config: %v\n", err)
 	}
 
+	var brackets []domains.TaxBracket
+
+	if err := pkg.LoadFromGob(TaxBracketsFile, &brackets); err != nil {
+		log.Fatalf("Failed to load tax brackets from %s: %v\n", TaxBracketsFile, err)
+	}
+	log.Printf("Loaded %d tax brackets from %s\n", len(brackets), TaxBracketsFile)
+
+	// Watch for changes to TaxBracketsFile and reload
+	go func() {
+		watcher, err := pkg.WatchFile(TaxBracketsFile)
+		if err != nil {
+			log.Printf("Warning: Failed to watch %s: %v\n", TaxBracketsFile, err)
+			return
+		}
+		defer watcher.Close()
+
+		for {
+			select {
+			case event, ok := <-watcher.Events:
+				if !ok {
+					return
+				}
+				if event.Has(pkg.Write) {
+					var updated []domains.TaxBracket
+					if err := pkg.LoadFromGob(TaxBracketsFile, &updated); err != nil {
+						log.Printf("Warning: Failed to reload tax brackets: %v\n", err)
+						continue
+					}
+					brackets = updated
+					log.Printf("Reloaded %d tax brackets from %s\n", len(brackets), TaxBracketsFile)
+				}
+			case err, ok := <-watcher.Errors:
+				if !ok {
+					return
+				}
+				log.Printf("Warning: File watcher error: %v\n", err)
+			}
+		}
+	}()
+
+	strategy := &domains.ProgressiveTaxStrategy{Brackets: brackets}
+	service := services.NewPayslipService(strategy)
+	handlers := handlers.PayslipHandler{Service: service}
+
 	app := fiber.New()
 
 	app.Use(recover.New())
 	app.Use(logger.New())
 
-	payslipHandler := handlers.NewPayslipHandler()
-
-	app.Post("/gen_monthly_payslip", payslipHandler.GenMonthlyPayslip)
+	app.Post("/gen_monthly_payslip", handlers.GenMonthlyPayslip)
 
 	listenConfig := fiber.ListenConfig{
 		EnablePrefork: cfg.Prefork,
