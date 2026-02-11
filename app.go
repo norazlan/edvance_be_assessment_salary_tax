@@ -4,17 +4,37 @@ import (
 	"log"
 
 	"edvance-assessment/config"
+	"edvance-assessment/internal/domains"
 	"edvance-assessment/internal/handlers"
+	"edvance-assessment/pkg"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/logger"
 	"github.com/gofiber/fiber/v3/middleware/recover"
 )
 
+const TaxBracketsFile = "data/tax_brackets.gob"
+
+func init() {
+	brackets := []domains.TaxBracket{
+		{Min: 0, Max: 20000, Rate: 0.0},
+		{Min: 20001, Max: 40000, Rate: 0.1},
+		{Min: 40001, Max: 80000, Rate: 0.2},
+		{Min: 80001, Max: 180000, Rate: 0.3},
+		{Min: 180001, Max: 999999999, Rate: 0.4},
+	}
+
+	if err := pkg.SaveToGob(TaxBracketsFile, brackets); err != nil {
+		log.Fatalf("Warning: Failed to save tax brackets to GOB file: %v\n", err)
+	} else {
+		log.Printf("Tax brackets saved to %s\n", TaxBracketsFile)
+	}
+}
+
 func main() {
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		log.Fatalf("Failed to load config: %v\n", err)
 	}
 
 	app := fiber.New()
