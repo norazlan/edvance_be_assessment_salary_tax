@@ -2,7 +2,6 @@ package domains
 
 import (
 	"context"
-	"math"
 )
 
 // TaxCalculator is the contract for the tax calculation strategy
@@ -30,5 +29,5 @@ func (s *ProgressiveTaxStrategy) CalculateAnnualTax(ctx context.Context, salary 
 			totalTax += (upper - b.Min) * b.Rate
 		}
 	}
-	return math.Round(totalTax*100) / 100
+	return totalTax
 }
