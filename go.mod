@@ -3,6 +3,7 @@ module edvance-assessment
 go 1.25.4
 
 require (
+	github.com/fsnotify/fsnotify v1.9.0
 	github.com/go-playground/validator/v10 v10.30.1
 	github.com/gofiber/fiber/v3 v3.0.0
 	github.com/joho/godotenv v1.5.1
