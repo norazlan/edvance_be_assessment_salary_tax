@@ -14,9 +14,9 @@ config/                 # Env config, DB connection, migration runner
 migrations/             # Ordered SQL migration files (001_*.sql, ...)
 internal/
   domains/              # Domain entities + strategy interfaces (TaxCalculator)
-  repositories/         # Database access layer (TaxBracketRepository)
+  repositories/         # Database access layer (TaxBracketRepository, EmployeeRepository)
   services/             # Business logic (PayslipService)
-  handlers/             # HTTP handlers (Fiber context)
+  handlers/             # HTTP handler (PayslipHandler) + CLI handler (CLIHandler)
   models/               # Request/response DTOs
 pkg/                    # Shared utilities (validator, GOB storage, file watcher)
 data/                   # Runtime GOB cache (ephemeral, deleted on shutdown)
@@ -42,14 +42,33 @@ All wiring happens in `app.go main()`:
 
 ```go
 repo := repositories.NewTaxBracketRepository(db)
+employeeRepo := repositories.NewEmployeeRepository(db)
 strategy := &domains.ProgressiveTaxStrategy{Brackets: brackets}
 service := services.NewPayslipService(strategy)
-handler := &handlers.PayslipHandler{Service: service}
+handler := &handlers.PayslipHandler{Service: service, EmployeeRepo: employeeRepo}
 ```
 
 ### Repository Pattern
 
 `TaxBracketRepository` wraps `*sql.DB`. Key methods: `GetActiveBrackets()`, `GetActiveByVersion(v)`, `GetLatestVersion()`, `DeactivateVersion(v)`.
+
+`EmployeeRepository` wraps `*sql.DB`. Key method: `Upsert(name, annualSalary, monthlyIncomeTax)` — uses `INSERT ... ON CONFLICT (name) DO UPDATE` for upsert.
+
+### Dual Mode (Web / CLI)
+
+App runs as web server or CLI based on `APP_MODE` env variable:
+
+- `web` (default) — Fiber HTTP server with `POST /gen_monthly_payslip`
+- `cli` — Prompts user for `name` and `annual salary`, prints payslip to console
+
+Both modes use the same `PayslipService`, validation via `pkg.ValidateStruct()`, and save employee data to DB via `EmployeeRepository.Upsert()`.
+
+### Employee Table (Database)
+
+`employee` table stores payslip records with `name` as UNIQUE constraint:
+
+- New name → INSERT
+- Existing name → UPDATE `annual_salary`, `monthly_income_tax`, `updated_at`
 
 ### Tax Bracket Versioning (Database)
 
@@ -94,6 +113,7 @@ All money values rounded to 2 decimal places: `math.Round(x*100) / 100`.
 | ---------- | ------------- | ---------------------------- |
 | `APP_ENV`  | `development` | `production` enables prefork |
 | `APP_PORT` | `3000`        | Server port                  |
+| `APP_MODE` | `web`         | `web` or `cli`               |
 | `DB_HOST`  | `localhost`   | PostgreSQL host              |
 | `DB_PORT`  | `5432`        | PostgreSQL port              |
 | `DB_USER`  | `postgres`    | PostgreSQL user              |
