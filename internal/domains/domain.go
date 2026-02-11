@@ -17,12 +17,12 @@ type TaxBracket struct {
 func (s *ProgressiveTaxStrategy) CalculateAnnualTax(salary float64) float64 {
 	totalTax := 0.0
 	for _, b := range s.Brackets {
-		if salary > b.Min {
+		if salary >= b.Min {
 			upper := b.Max
 			if salary < b.Max {
 				upper = salary
 			}
-			totalTax += (upper - b.Min) * b.Rate
+			totalTax += (upper - b.Min + 1) * b.Rate
 		}
 	}
 	return totalTax
