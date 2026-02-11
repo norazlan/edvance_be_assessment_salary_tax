@@ -9,6 +9,7 @@ import (
 	"edvance-assessment/config"
 	"edvance-assessment/internal/domains"
 	"edvance-assessment/internal/handlers"
+	"edvance-assessment/internal/repositories"
 	"edvance-assessment/internal/services"
 	"edvance-assessment/pkg"
 
@@ -19,34 +20,39 @@ import (
 
 const TaxBracketsFile = "data/tax_brackets.gob"
 
-func init() {
-	brackets := []domains.TaxBracket{
-		{Min: 0, Max: 20000, Rate: 0.0},
-		{Min: 20001, Max: 40000, Rate: 0.1},
-		{Min: 40001, Max: 80000, Rate: 0.2},
-		{Min: 80001, Max: 180000, Rate: 0.3},
-		{Min: 180001, Max: 999999999, Rate: 0.4},
-	}
-
-	if err := pkg.SaveToGob(TaxBracketsFile, brackets); err != nil {
-		log.Fatalf("Warning: Failed to save tax brackets to GOB file: %v\n", err)
-	} else {
-		log.Printf("Tax brackets saved to %s\n", TaxBracketsFile)
-	}
-}
-
 func main() {
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Fatalf("Failed to load config: %v\n", err)
 	}
 
-	var brackets []domains.TaxBracket
-
-	if err := pkg.LoadFromGob(TaxBracketsFile, &brackets); err != nil {
-		log.Fatalf("Failed to load tax brackets from %s: %v\n", TaxBracketsFile, err)
+	// Connect to database
+	db, err := config.ConnectDB(cfg)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v\n", err)
 	}
-	log.Printf("Loaded %d tax brackets from %s\n", len(brackets), TaxBracketsFile)
+	defer db.Close()
+	log.Println("Database connected")
+
+	// Run migrations
+	if err := config.RunMigrations(db, "migrations"); err != nil {
+		log.Fatalf("Failed to run migrations: %v\n", err)
+	}
+
+	// Load tax brackets from database
+	repo := repositories.NewTaxBracketRepository(db)
+	brackets, version, err := repo.GetActiveBrackets()
+	if err != nil {
+		log.Fatalf("Failed to load tax brackets from database: %v\n", err)
+	}
+	log.Printf("Loaded %d tax brackets (version %d) from database\n", len(brackets), version)
+
+	// Cache brackets to GOB file
+	if err := pkg.SaveToGob(TaxBracketsFile, brackets); err != nil {
+		log.Printf("Warning: Failed to cache tax brackets to GOB file: %v\n", err)
+	} else {
+		log.Printf("Tax brackets cached to %s\n", TaxBracketsFile)
+	}
 
 	// Watch for changes to TaxBracketsFile and reload
 	go func() {
@@ -83,14 +89,14 @@ func main() {
 
 	strategy := &domains.ProgressiveTaxStrategy{Brackets: brackets}
 	service := services.NewPayslipService(strategy)
-	handlers := handlers.PayslipHandler{Service: service}
+	payslipHandler := &handlers.PayslipHandler{Service: service}
 
 	app := fiber.New()
 
 	app.Use(recover.New())
 	app.Use(logger.New())
 
-	app.Post("/gen_monthly_payslip", handlers.GenMonthlyPayslip)
+	app.Post("/gen_monthly_payslip", payslipHandler.GenMonthlyPayslip)
 
 	listenConfig := fiber.ListenConfig{
 		EnablePrefork: cfg.Prefork,
