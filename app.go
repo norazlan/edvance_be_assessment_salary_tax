@@ -89,6 +89,29 @@ func main() {
 
 	strategy := &domains.ProgressiveTaxStrategy{Brackets: brackets}
 	service := services.NewPayslipService(strategy)
+
+	// Run as CLI or Web based on APP_MODE
+	if cfg.AppMode == "cli" {
+		runCLI(service)
+	} else {
+		runWeb(cfg, service)
+	}
+
+	// Cleanup GOB file on exit
+	if err := os.Remove(TaxBracketsFile); err != nil {
+		log.Printf("Warning: Failed to delete %s: %v\n", TaxBracketsFile, err)
+	} else {
+		log.Printf("Deleted %s\n", TaxBracketsFile)
+	}
+}
+
+func runCLI(service *services.PayslipService) {
+	log.Println("Running in CLI mode")
+	cliHandler := &handlers.CLIHandler{Service: service}
+	cliHandler.Run()
+}
+
+func runWeb(cfg *config.Config, service *services.PayslipService) {
 	payslipHandler := &handlers.PayslipHandler{Service: service}
 
 	app := fiber.New()
@@ -109,13 +132,6 @@ func main() {
 	go func() {
 		<-quit
 		log.Println("Shutting down server...")
-
-		// Delete TaxBracketsFile before shutdown
-		if err := os.Remove(TaxBracketsFile); err != nil {
-			log.Printf("Warning: Failed to delete %s: %v\n", TaxBracketsFile, err)
-		} else {
-			log.Printf("Deleted %s\n", TaxBracketsFile)
-		}
 
 		if err := app.Shutdown(); err != nil {
 			log.Fatalf("Server shutdown failed: %v\n", err)
