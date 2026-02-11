@@ -1,77 +1,111 @@
 # Copilot Instructions for Edvance BE Assessment
 
-## Architecture Overview
+## Architecture
 
-Go REST API using **Fiber v3** framework with clean architecture pattern:
+Go REST API using **Fiber v3** with clean architecture. Data flows:
 
 ```
-app.go              # Entry point - Fiber setup, middleware, routes
-config/             # Environment configuration via godotenv
+PostgreSQL → Repository → GOB cache (data/tax_brackets.gob) → Strategy → Service → Handler
+```
+
+```
+app.go                  # Entry point - wiring, middleware, routes, graceful shutdown
+config/                 # Env config, DB connection, migration runner
+migrations/             # Ordered SQL migration files (001_*.sql, ...)
 internal/
-  handlers/         # HTTP handlers (controller layer)
-  models/           # Request/response DTOs
-  services/         # Business logic (to be implemented)
-  domains/          # Domain entities (to be implemented)
-pkg/                # Shared utilities (validation)
+  domains/              # Domain entities + strategy interfaces (TaxCalculator)
+  repositories/         # Database access layer (TaxBracketRepository)
+  services/             # Business logic (PayslipService)
+  handlers/             # HTTP handlers (Fiber context)
+  models/               # Request/response DTOs
+pkg/                    # Shared utilities (validator, GOB storage, file watcher)
+data/                   # Runtime GOB cache (ephemeral, deleted on shutdown)
 ```
 
 ## Key Patterns
 
-### Handler Pattern
+### Strategy Pattern (Domain Layer)
 
-Handlers use constructor pattern and receive Fiber context:
+`TaxCalculator` interface in `internal/domains/` allows swappable tax algorithms:
 
 ```go
-type PayslipHandler struct{}
-func NewPayslipHandler() *PayslipHandler { return &PayslipHandler{} }
-func (h *PayslipHandler) GenMonthlyPayslip(c fiber.Ctx) error { ... }
+type TaxCalculator interface {
+    CalculateAnnualTax(salary float64) float64
+}
 ```
+
+`ProgressiveTaxStrategy` is the concrete implementation with inclusive bracket ranges (`upper - b.Min + 1`).
+
+### Dependency Injection (Constructor-Based)
+
+All wiring happens in `app.go main()`:
+
+```go
+repo := repositories.NewTaxBracketRepository(db)
+strategy := &domains.ProgressiveTaxStrategy{Brackets: brackets}
+service := services.NewPayslipService(strategy)
+handler := &handlers.PayslipHandler{Service: service}
+```
+
+### Repository Pattern
+
+`TaxBracketRepository` wraps `*sql.DB`. Key methods: `GetActiveBrackets()`, `GetActiveByVersion(v)`, `GetLatestVersion()`, `DeactivateVersion(v)`.
+
+### Tax Bracket Versioning (Database)
+
+`tax_brackets` table supports versioned, soft-deletable brackets:
+
+- `version` (int) — group brackets by version number
+- `effective_date` — when the version takes effect
+- `is_active` (bool) — soft delete; `DeactivateVersion()` sets FALSE
+- Partial index on `(version, is_active) WHERE is_active = TRUE`
+
+### GOB File Cache + Hot Reload
+
+On startup: DB brackets → `pkg.SaveToGob()` → `data/tax_brackets.gob`. A `fsnotify` watcher goroutine auto-reloads brackets when the GOB file changes. File is deleted on graceful shutdown.
 
 ### Request/Response Models
 
-All models follow consistent structure in `internal/models/`:
+In `internal/models/`:
 
-- `XxxRequest` - input with `json` + `validate` tags
-- `XxxResponse` - success response with `Success`, `Message`, `Data`
-- `ErrorResponse` - error response with `Success`, `Message`, `Errors[]`
+- `PayslipRequest` — `json` + `validate` tags
+- `PayslipResponse` — `EmployeeName`, `GrossMonthlyIncome`, `MonthlyIncomeTax`, `NetMonthlyIncome`
+- `SuccessResponse` — envelope: `Success`, `Message`, `Data`
+- `ErrorResponse` — envelope: `Success`, `Message`, `Errors[]`
 
 ### Validation
 
-Use `pkg.ValidateStruct()` for request validation (go-playground/validator). Add validation tags directly to request structs:
+Use `pkg.ValidateStruct()` (go-playground/validator v10). Human-readable error messages for `required`, `min`, `max`, `gt` tags.
 
-```go
-Name string `json:"name" validate:"required,min=2,max=100"`
-```
+### Monetary Precision
 
-### Error Handling
-
-Return consistent JSON errors with HTTP status codes:
-
-```go
-return c.Status(fiber.StatusBadRequest).JSON(models.ErrorResponse{
-    Success: false,
-    Message: "Validation failed",
-    Errors:  validationErrors,
-})
-```
+All money values rounded to 2 decimal places: `math.Round(x*100) / 100`.
 
 ## Development
 
-- **Run**: `go run app.go` (requires `.env` file - copy from `.env.sample`)
-- **Lint**: `golangci-lint run`
-- **Format**: Auto-formats on save with `goimports`
+- **Run**: `go run app.go` (requires `.env` — copy from `.env.sample`, and PostgreSQL running)
 - **Test**: `go test -v ./...`
+- **Lint**: `golangci-lint run`
+- **Migrations**: Auto-run on startup via `config.RunMigrations()` — add new `.sql` files in `migrations/`
 
-## Configuration
+## Configuration (`.env`)
 
-Environment variables via `.env`:
-
-- `APP_ENV` - "development" or "production" (affects prefork)
-- `APP_PORT` - Server port (default: 3000)
+| Variable   | Default       | Purpose                      |
+| ---------- | ------------- | ---------------------------- |
+| `APP_ENV`  | `development` | `production` enables prefork |
+| `APP_PORT` | `3000`        | Server port                  |
+| `DB_HOST`  | `localhost`   | PostgreSQL host              |
+| `DB_PORT`  | `5432`        | PostgreSQL port              |
+| `DB_USER`  | `postgres`    | PostgreSQL user              |
+| `DB_PASS`  | _(empty)_     | PostgreSQL password          |
+| `DB_NAME`  | `edvance`     | PostgreSQL database          |
 
 ## Adding New Features
 
 1. Define request/response models in `internal/models/`
-2. Create handler in `internal/handlers/` with `NewXxxHandler()` constructor
-3. Add route in `app.go`
-4. For business logic, add services in `internal/services/`
+2. Add domain entities/interfaces in `internal/domains/`
+3. Add repository in `internal/repositories/` if DB access needed
+4. Add service in `internal/services/` with domain interface dependency
+5. Create handler in `internal/handlers/`
+6. Wire dependencies and add route in `app.go`
+7. Add SQL migration in `migrations/` (numbered, e.g. `002_*.sql`)
