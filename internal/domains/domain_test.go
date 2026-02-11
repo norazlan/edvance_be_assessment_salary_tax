@@ -1,17 +1,76 @@
-package domains
+package domains_test
 
-import "testing"
+import (
+	"database/sql"
+	"fmt"
+	"os"
+	"testing"
+
+	"edvance-assessment/config"
+	"edvance-assessment/internal/domains"
+	"edvance-assessment/internal/repositories"
+
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
+)
+
+func loadBracketsFromDB(t *testing.T) []domains.TaxBracket {
+	t.Helper()
+
+	// Load .env from project root
+	_ = godotenv.Load("../../.env")
+
+	dbHost := os.Getenv("DB_HOST")
+	if dbHost == "" {
+		dbHost = "localhost"
+	}
+	dbPort := os.Getenv("DB_PORT")
+	if dbPort == "" {
+		dbPort = "5432"
+	}
+	dbUser := os.Getenv("DB_USER")
+	if dbUser == "" {
+		dbUser = "postgres"
+	}
+	dbPass := os.Getenv("DB_PASS")
+	dbName := os.Getenv("DB_NAME")
+	if dbName == "" {
+		dbName = "edvance"
+	}
+
+	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+		dbHost, dbPort, dbUser, dbPass, dbName)
+
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	if err := db.Ping(); err != nil {
+		t.Fatalf("Failed to ping database: %v", err)
+	}
+
+	if err := config.RunMigrations(db, "../../migrations"); err != nil {
+		t.Fatalf("Failed to run migrations: %v", err)
+	}
+
+	repo := repositories.NewTaxBracketRepository(db)
+	brackets, _, err := repo.GetActiveBrackets()
+	if err != nil {
+		t.Fatalf("Failed to load tax brackets: %v", err)
+	}
+
+	if len(brackets) == 0 {
+		t.Fatal("No active tax brackets found in database")
+	}
+
+	return brackets
+}
 
 func TestProgressiveTaxStrategy_CalculateAnnualTax(t *testing.T) {
-	strategy := &ProgressiveTaxStrategy{
-		Brackets: []TaxBracket{
-			{Min: 0, Max: 20000, Rate: 0.0},
-			{Min: 20001, Max: 40000, Rate: 0.1},
-			{Min: 40001, Max: 80000, Rate: 0.2},
-			{Min: 80001, Max: 180000, Rate: 0.3},
-			{Min: 180001, Max: 999999999, Rate: 0.4},
-		},
-	}
+	brackets := loadBracketsFromDB(t)
+	strategy := &domains.ProgressiveTaxStrategy{Brackets: brackets}
 
 	tests := []struct {
 		name     string
