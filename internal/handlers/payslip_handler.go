@@ -2,15 +2,14 @@ package handlers
 
 import (
 	"edvance-assessment/internal/models"
+	"edvance-assessment/internal/services"
 	"edvance-assessment/pkg"
 
 	"github.com/gofiber/fiber/v3"
 )
 
-type PayslipHandler struct{}
-
-func NewPayslipHandler() *PayslipHandler {
-	return &PayslipHandler{}
+type PayslipHandler struct {
+	Service *services.PayslipService
 }
 
 func (h *PayslipHandler) GenMonthlyPayslip(c fiber.Ctx) error {
@@ -33,13 +32,9 @@ func (h *PayslipHandler) GenMonthlyPayslip(c fiber.Ctx) error {
 		})
 	}
 
-	payslipData := map[string]interface{}{
-		"name":           req.Name,
-		"salary":         req.Salary,
-		"monthly_salary": req.Salary,
-	}
+	payslipData := h.Service.Generate_monthly_payslip(req.Name, req.Salary)
 
-	return c.Status(fiber.StatusOK).JSON(models.PayslipResponse{
+	return c.Status(fiber.StatusOK).JSON(models.SuccessResponse{
 		Success: true,
 		Message: "Monthly payslip generated successfully",
 		Data:    payslipData,
