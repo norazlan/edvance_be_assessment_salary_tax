@@ -9,6 +9,7 @@ import (
 type Config struct {
 	AppEnv  string
 	AppPort string
+	AppMode string
 	Prefork bool
 	DBHost  string
 	DBPort  string
@@ -31,6 +32,11 @@ func LoadConfig() (*Config, error) {
 	appPort := os.Getenv("APP_PORT")
 	if appPort == "" {
 		appPort = "3000"
+	}
+
+	appMode := os.Getenv("APP_MODE")
+	if appMode == "" {
+		appMode = "web"
 	}
 
 	prefork := appEnv == "production"
@@ -59,6 +65,7 @@ func LoadConfig() (*Config, error) {
 	return &Config{
 		AppEnv:  appEnv,
 		AppPort: appPort,
+		AppMode: appMode,
 		Prefork: prefork,
 		DBHost:  dbHost,
 		DBPort:  dbPort,
