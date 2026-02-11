@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"edvance-assessment/internal/models"
+	"edvance-assessment/internal/repositories"
 	"edvance-assessment/internal/services"
 	"edvance-assessment/pkg"
 
@@ -9,7 +10,8 @@ import (
 )
 
 type PayslipHandler struct {
-	Service *services.PayslipService
+	Service    *services.PayslipService
+	EmployeeRepo *repositories.EmployeeRepository
 }
 
 func (h *PayslipHandler) GenMonthlyPayslip(c fiber.Ctx) error {
@@ -33,6 +35,15 @@ func (h *PayslipHandler) GenMonthlyPayslip(c fiber.Ctx) error {
 	}
 
 	payslipData := h.Service.Generate_monthly_payslip(req.Name, req.Salary)
+
+	// Save to database (upsert)
+	if err := h.EmployeeRepo.Upsert(req.Name, req.Salary, payslipData.MonthlyIncomeTax); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(models.ErrorResponse{
+			Success: false,
+			Message: "Failed to save employee data",
+			Errors:  []string{err.Error()},
+		})
+	}
 
 	return c.Status(fiber.StatusOK).JSON(models.SuccessResponse{
 		Success: true,

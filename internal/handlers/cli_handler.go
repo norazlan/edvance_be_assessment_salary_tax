@@ -8,13 +8,15 @@ import (
 	"strings"
 
 	"edvance-assessment/internal/models"
+	"edvance-assessment/internal/repositories"
 	"edvance-assessment/internal/services"
 	"edvance-assessment/pkg"
 )
 
 // CLIHandler handles the CLI mode for payslip generation
 type CLIHandler struct {
-	Service *services.PayslipService
+	Service      *services.PayslipService
+	EmployeeRepo *repositories.EmployeeRepository
 }
 
 // Run prompts user for input and displays the payslip
@@ -54,6 +56,11 @@ func (h *CLIHandler) Run() {
 
 	// Generate payslip
 	payslip := h.Service.Generate_monthly_payslip(name, salary)
+
+	// Save to database (upsert)
+	if err := h.EmployeeRepo.Upsert(name, salary, payslip.MonthlyIncomeTax); err != nil {
+		fmt.Printf("\nWarning: Failed to save employee data: %v\n", err)
+	}
 
 	// Print formatted output
 	fmt.Println()

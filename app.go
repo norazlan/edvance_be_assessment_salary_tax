@@ -89,12 +89,13 @@ func main() {
 
 	strategy := &domains.ProgressiveTaxStrategy{Brackets: brackets}
 	service := services.NewPayslipService(strategy)
+	employeeRepo := repositories.NewEmployeeRepository(db)
 
 	// Run as CLI or Web based on APP_MODE
 	if cfg.AppMode == "cli" {
-		runCLI(service)
+		runCLI(service, employeeRepo)
 	} else {
-		runWeb(cfg, service)
+		runWeb(cfg, service, employeeRepo)
 	}
 
 	// Cleanup GOB file on exit
@@ -105,14 +106,14 @@ func main() {
 	}
 }
 
-func runCLI(service *services.PayslipService) {
+func runCLI(service *services.PayslipService, employeeRepo *repositories.EmployeeRepository) {
 	log.Println("Running in CLI mode")
-	cliHandler := &handlers.CLIHandler{Service: service}
+	cliHandler := &handlers.CLIHandler{Service: service, EmployeeRepo: employeeRepo}
 	cliHandler.Run()
 }
 
-func runWeb(cfg *config.Config, service *services.PayslipService) {
-	payslipHandler := &handlers.PayslipHandler{Service: service}
+func runWeb(cfg *config.Config, service *services.PayslipService, employeeRepo *repositories.EmployeeRepository) {
+	payslipHandler := &handlers.PayslipHandler{Service: service, EmployeeRepo: employeeRepo}
 
 	app := fiber.New()
 
