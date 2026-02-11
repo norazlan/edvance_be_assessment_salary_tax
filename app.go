@@ -2,6 +2,9 @@ package main
 
 import (
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"edvance-assessment/config"
 	"edvance-assessment/internal/domains"
@@ -50,6 +53,29 @@ func main() {
 		EnablePrefork: cfg.Prefork,
 	}
 
+	// Graceful shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		<-quit
+		log.Println("Shutting down server...")
+
+		// Delete TaxBracketsFile before shutdown
+		if err := os.Remove(TaxBracketsFile); err != nil {
+			log.Printf("Warning: Failed to delete %s: %v\n", TaxBracketsFile, err)
+		} else {
+			log.Printf("Deleted %s\n", TaxBracketsFile)
+		}
+
+		if err := app.Shutdown(); err != nil {
+			log.Fatalf("Server shutdown failed: %v\n", err)
+		}
+		log.Println("Server shutdown complete")
+	}()
+
 	log.Printf("Server starting on port %s (env: %s, prefork: %v)", cfg.AppPort, cfg.AppEnv, cfg.Prefork)
-	log.Fatal(app.Listen(":"+cfg.AppPort, listenConfig))
+	if err := app.Listen(":"+cfg.AppPort, listenConfig); err != nil {
+		log.Printf("Server stopped: %v\n", err)
+	}
 }
