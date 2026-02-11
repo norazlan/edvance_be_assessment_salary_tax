@@ -7,6 +7,7 @@ require (
 	github.com/go-playground/validator/v10 v10.30.1
 	github.com/gofiber/fiber/v3 v3.0.0
 	github.com/joho/godotenv v1.5.1
+	github.com/lib/pq v1.11.2
 )
 
 require (

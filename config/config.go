@@ -10,6 +10,11 @@ type Config struct {
 	AppEnv  string
 	AppPort string
 	Prefork bool
+	DBHost  string
+	DBPort  string
+	DBUser  string
+	DBPass  string
+	DBName  string
 }
 
 func LoadConfig() (*Config, error) {
@@ -30,9 +35,35 @@ func LoadConfig() (*Config, error) {
 
 	prefork := appEnv == "production"
 
+	dbHost := os.Getenv("DB_HOST")
+	if dbHost == "" {
+		dbHost = "localhost"
+	}
+
+	dbPort := os.Getenv("DB_PORT")
+	if dbPort == "" {
+		dbPort = "5432"
+	}
+
+	dbUser := os.Getenv("DB_USER")
+	if dbUser == "" {
+		dbUser = "postgres"
+	}
+
+	dbPass := os.Getenv("DB_PASS")
+	dbName := os.Getenv("DB_NAME")
+	if dbName == "" {
+		dbName = "edvance"
+	}
+
 	return &Config{
 		AppEnv:  appEnv,
 		AppPort: appPort,
 		Prefork: prefork,
+		DBHost:  dbHost,
+		DBPort:  dbPort,
+		DBUser:  dbUser,
+		DBPass:  dbPass,
+		DBName:  dbName,
 	}, nil
 }
