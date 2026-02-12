@@ -121,6 +121,7 @@ func runWeb(cfg *config.Config, service *services.PayslipService, employeeRepo *
 	app.Use(logger.New())
 
 	app.Post("/gen_monthly_payslip", payslipHandler.GenMonthlyPayslip)
+	app.Get("/employees", payslipHandler.GetAllEmployees)
 
 	listenConfig := fiber.ListenConfig{
 		EnablePrefork: cfg.Prefork,
