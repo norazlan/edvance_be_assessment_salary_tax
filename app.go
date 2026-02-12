@@ -95,7 +95,7 @@ func main() {
 	if cfg.AppMode == "cli" {
 		runCLI(service, employeeRepo)
 	} else {
-		runWeb(cfg, service, employeeRepo)
+		runWeb(cfg, service, employeeRepo, repo)
 	}
 
 	// Cleanup GOB file on exit
@@ -112,7 +112,7 @@ func runCLI(service *services.PayslipService, employeeRepo *repositories.Employe
 	cliHandler.Run()
 }
 
-func runWeb(cfg *config.Config, service *services.PayslipService, employeeRepo *repositories.EmployeeRepository) {
+func runWeb(cfg *config.Config, service *services.PayslipService, employeeRepo *repositories.EmployeeRepository, taxBracketRepo *repositories.TaxBracketRepository) {
 	emailService := services.NewEmailService(services.SMTPConfig{
 		APIKey:   cfg.EmailServerAPIKey,
 		Host:     cfg.EmailSMTPHost,
@@ -122,9 +122,10 @@ func runWeb(cfg *config.Config, service *services.PayslipService, employeeRepo *
 	})
 
 	payslipHandler := &handlers.PayslipHandler{
-		Service:      service,
-		EmployeeRepo: employeeRepo,
-		EmailService: emailService,
+		Service:        service,
+		EmployeeRepo:   employeeRepo,
+		EmailService:   emailService,
+		TaxBracketRepo: taxBracketRepo,
 	}
 
 	app := fiber.New()
@@ -135,6 +136,7 @@ func runWeb(cfg *config.Config, service *services.PayslipService, employeeRepo *
 	app.Post("/gen_monthly_payslip", payslipHandler.GenMonthlyPayslip)
 	app.Get("/employees", payslipHandler.GetAllEmployees)
 	app.Post("/send_email", payslipHandler.SendEmail)
+	app.Post("/set_tax_brackets", payslipHandler.SetTaxBrackets)
 
 	listenConfig := fiber.ListenConfig{
 		EnablePrefork: cfg.Prefork,
