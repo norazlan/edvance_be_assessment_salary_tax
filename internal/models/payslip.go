@@ -59,3 +59,7 @@ type SetTaxBracketsResponse struct {
 	IsActive      bool              `json:"is_active"`
 	Brackets      []TaxBracketInput `json:"brackets"`
 }
+
+type SetTaxBracketsActiveRequest struct {
+	Version int `json:"version" validate:"required,gt=0"`
+}

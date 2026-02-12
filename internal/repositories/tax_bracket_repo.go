@@ -88,6 +88,70 @@ WHERE version = $1
 	return nil
 }
 
+// DeactivateAllVersions marks all active brackets as inactive
+func (r *TaxBracketRepository) DeactivateAllVersions() error {
+	_, err := r.DB.Exec(`
+UPDATE tax_brackets
+SET is_active = FALSE, updated_at = NOW()
+WHERE is_active = TRUE
+`)
+	if err != nil {
+		return fmt.Errorf("failed to deactivate all versions: %w", err)
+	}
+	return nil
+}
+
+// ActivateVersion activates a specific version (deactivates all others first)
+func (r *TaxBracketRepository) ActivateVersion(version int) error {
+	tx, err := r.DB.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Deactivate all active versions
+	_, err = tx.Exec(`
+UPDATE tax_brackets
+SET is_active = FALSE, updated_at = NOW()
+WHERE is_active = TRUE
+`)
+	if err != nil {
+		return fmt.Errorf("failed to deactivate all versions: %w", err)
+	}
+
+	// Activate the specified version
+	result, err := tx.Exec(`
+UPDATE tax_brackets
+SET is_active = TRUE, updated_at = NOW()
+WHERE version = $1
+`, version)
+	if err != nil {
+		return fmt.Errorf("failed to activate version %d: %w", version, err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("version %d not found", version)
+	}
+
+	return tx.Commit()
+}
+
+// VersionExists checks if a version exists in the database
+func (r *TaxBracketRepository) VersionExists(version int) (bool, error) {
+	var exists bool
+	err := r.DB.QueryRow(`
+SELECT EXISTS(SELECT 1 FROM tax_brackets WHERE version = $1)
+`, version).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("failed to check version existence: %w", err)
+	}
+	return exists, nil
+}
+
 // GetMaxVersion returns the highest version number across all brackets (active or not)
 func (r *TaxBracketRepository) GetMaxVersion() (int, error) {
 	var version int

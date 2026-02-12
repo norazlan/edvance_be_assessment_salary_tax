@@ -54,39 +54,6 @@ func main() {
 		log.Printf("Tax brackets cached to %s\n", TaxBracketsFile)
 	}
 
-	// Watch for changes to TaxBracketsFile and reload
-	go func() {
-		watcher, err := pkg.WatchFile(TaxBracketsFile)
-		if err != nil {
-			log.Printf("Warning: Failed to watch %s: %v\n", TaxBracketsFile, err)
-			return
-		}
-		defer watcher.Close()
-
-		for {
-			select {
-			case event, ok := <-watcher.Events:
-				if !ok {
-					return
-				}
-				if event.Has(pkg.Write) {
-					var updated []domains.TaxBracket
-					if err := pkg.LoadFromGob(TaxBracketsFile, &updated); err != nil {
-						log.Printf("Warning: Failed to reload tax brackets: %v\n", err)
-						continue
-					}
-					brackets = updated
-					log.Printf("Reloaded %d tax brackets from %s\n", len(brackets), TaxBracketsFile)
-				}
-			case err, ok := <-watcher.Errors:
-				if !ok {
-					return
-				}
-				log.Printf("Warning: File watcher error: %v\n", err)
-			}
-		}
-	}()
-
 	strategy := &domains.ProgressiveTaxStrategy{Brackets: brackets}
 	service := services.NewPayslipService(strategy)
 	employeeRepo := repositories.NewEmployeeRepository(db)
@@ -95,7 +62,7 @@ func main() {
 	if cfg.AppMode == "cli" {
 		runCLI(service, employeeRepo)
 	} else {
-		runWeb(cfg, service, employeeRepo, repo)
+		runWeb(cfg, service, employeeRepo, repo, strategy)
 	}
 
 	// Cleanup GOB file on exit
@@ -112,7 +79,7 @@ func runCLI(service *services.PayslipService, employeeRepo *repositories.Employe
 	cliHandler.Run()
 }
 
-func runWeb(cfg *config.Config, service *services.PayslipService, employeeRepo *repositories.EmployeeRepository, taxBracketRepo *repositories.TaxBracketRepository) {
+func runWeb(cfg *config.Config, service *services.PayslipService, employeeRepo *repositories.EmployeeRepository, taxBracketRepo *repositories.TaxBracketRepository, strategy *domains.ProgressiveTaxStrategy) {
 	emailService := services.NewEmailService(services.SMTPConfig{
 		APIKey:   cfg.EmailServerAPIKey,
 		Host:     cfg.EmailSMTPHost,
@@ -126,6 +93,7 @@ func runWeb(cfg *config.Config, service *services.PayslipService, employeeRepo *
 		EmployeeRepo:   employeeRepo,
 		EmailService:   emailService,
 		TaxBracketRepo: taxBracketRepo,
+		Strategy:       strategy,
 	}
 
 	app := fiber.New()
@@ -137,6 +105,7 @@ func runWeb(cfg *config.Config, service *services.PayslipService, employeeRepo *
 	app.Get("/employees", payslipHandler.GetAllEmployees)
 	app.Post("/send_email", payslipHandler.SendEmail)
 	app.Post("/set_tax_brackets", payslipHandler.SetTaxBrackets)
+	app.Post("/set_tax_brackets_active", payslipHandler.SetTaxBracketsActive)
 
 	listenConfig := fiber.ListenConfig{
 		EnablePrefork: cfg.Prefork,

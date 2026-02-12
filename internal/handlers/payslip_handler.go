@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"fmt"
+	"log"
 
+	"edvance-assessment/internal/domains"
 	"edvance-assessment/internal/models"
 	"edvance-assessment/internal/repositories"
 	"edvance-assessment/internal/services"
@@ -16,6 +18,7 @@ type PayslipHandler struct {
 	EmployeeRepo   *repositories.EmployeeRepository
 	EmailService   *services.EmailService
 	TaxBracketRepo *repositories.TaxBracketRepository
+	Strategy       *domains.ProgressiveTaxStrategy
 }
 
 func (h *PayslipHandler) GenMonthlyPayslip(c fiber.Ctx) error {
@@ -197,6 +200,35 @@ func (h *PayslipHandler) SetTaxBrackets(c fiber.Ctx) error {
 		})
 	}
 
+	// If new brackets are active, deactivate old versions and refresh GOB cache
+	if isActive {
+		// Deactivate all other versions
+		if err := h.TaxBracketRepo.DeactivateAllVersions(); err != nil {
+			log.Printf("Warning: Failed to deactivate old versions: %v\n", err)
+		}
+
+		// Re-activate only the new version (since DeactivateAllVersions deactivated it too)
+		if err := h.TaxBracketRepo.ActivateVersion(newVersion); err != nil {
+			log.Printf("Warning: Failed to re-activate new version: %v\n", err)
+		}
+
+		// Refresh GOB cache
+		activeBrackets, _, err := h.TaxBracketRepo.GetActiveBrackets()
+		if err != nil {
+			log.Printf("Warning: Failed to reload active brackets after insert: %v\n", err)
+		} else {
+			// Update strategy directly (don't rely on file watcher)
+			h.Strategy.Brackets = activeBrackets
+			log.Printf("Strategy updated with new active brackets (version %d)\n", newVersion)
+
+			if err := pkg.SaveToGob("data/tax_brackets.gob", activeBrackets); err != nil {
+				log.Printf("Warning: Failed to update GOB cache: %v\n", err)
+			} else {
+				log.Printf("GOB cache updated with new active brackets (version %d)\n", newVersion)
+			}
+		}
+	}
+
 	return c.Status(fiber.StatusCreated).JSON(models.SuccessResponse{
 		Success: true,
 		Message: fmt.Sprintf("Tax brackets version %d created successfully", newVersion),
@@ -206,5 +238,74 @@ func (h *PayslipHandler) SetTaxBrackets(c fiber.Ctx) error {
 			IsActive:      isActive,
 			Brackets:      bracketInputs,
 		},
+	})
+}
+
+func (h *PayslipHandler) SetTaxBracketsActive(c fiber.Ctx) error {
+	var req models.SetTaxBracketsActiveRequest
+
+	if err := c.Bind().JSON(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(models.ErrorResponse{
+			Success: false,
+			Message: "Invalid request body",
+			Errors:  []string{err.Error()},
+		})
+	}
+
+	validationErrors := pkg.ValidateStruct(req)
+	if len(validationErrors) > 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(models.ErrorResponse{
+			Success: false,
+			Message: "Validation failed",
+			Errors:  validationErrors,
+		})
+	}
+
+	// Check if version exists
+	exists, err := h.TaxBracketRepo.VersionExists(req.Version)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(models.ErrorResponse{
+			Success: false,
+			Message: "Failed to check version",
+			Errors:  []string{err.Error()},
+		})
+	}
+	if !exists {
+		return c.Status(fiber.StatusNotFound).JSON(models.ErrorResponse{
+			Success: false,
+			Message: fmt.Sprintf("Tax brackets version %d not found", req.Version),
+			Errors:  []string{"version does not exist"},
+		})
+	}
+
+	// Activate the version (deactivates all others in a transaction)
+	if err := h.TaxBracketRepo.ActivateVersion(req.Version); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(models.ErrorResponse{
+			Success: false,
+			Message: "Failed to activate version",
+			Errors:  []string{err.Error()},
+		})
+	}
+
+	// Refresh GOB cache
+	activeBrackets, _, err := h.TaxBracketRepo.GetActiveBrackets()
+	if err != nil {
+		log.Printf("Warning: Failed to reload active brackets: %v\n", err)
+	} else {
+		// Update strategy directly (don't rely on file watcher)
+		h.Strategy.Brackets = activeBrackets
+		log.Printf("Strategy updated with active brackets (version %d)\n", req.Version)
+
+		if err := pkg.SaveToGob("data/tax_brackets.gob", activeBrackets); err != nil {
+			log.Printf("Warning: Failed to update GOB cache: %v\n", err)
+		} else {
+			log.Printf("GOB cache updated with active brackets (version %d)\n", req.Version)
+		}
+	}
+
+	return c.Status(fiber.StatusOK).JSON(models.SuccessResponse{
+		Success: true,
+		Message: fmt.Sprintf("Tax brackets version %d activated successfully", req.Version),
+		Data:    nil,
 	})
 }
