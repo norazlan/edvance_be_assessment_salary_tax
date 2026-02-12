@@ -330,3 +330,7 @@ Activate a specific tax bracket version (deactivates all others).
 - **MIME multipart email** — CSV attachment built and sent via `net/smtp` with `smtp.PlainAuth`
 - **Struct validation** — request validation via `go-playground/validator` with human-readable error messages
 - **Clean architecture** — no circular dependencies; clear separation of domains, services, repositories, and handlers
+
+## Final Code
+
+- Final code is located at **06_feature/build_script** branch.
