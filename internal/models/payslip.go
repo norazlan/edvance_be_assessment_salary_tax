@@ -23,3 +23,16 @@ type SuccessResponse struct {
 	Message string          `json:"message"`
 	Data    PayslipResponse `json:"data"`
 }
+
+type EmployeeResponse struct {
+	TimeStamp       string  `json:"time_stamp"`
+	EmployeeName    string  `json:"employee_name"`
+	AnnualSalary    float64 `json:"annual_salary"`
+	MonthlyIncomeTax float64 `json:"monthly_income_tax"`
+}
+
+type EmployeeListResponse struct {
+	Success bool               `json:"success"`
+	Message string             `json:"message"`
+	Data    []EmployeeResponse `json:"data"`
+}
