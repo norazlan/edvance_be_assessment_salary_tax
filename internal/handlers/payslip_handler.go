@@ -51,3 +51,20 @@ func (h *PayslipHandler) GenMonthlyPayslip(c fiber.Ctx) error {
 		Data:    payslipData,
 	})
 }
+
+func (h *PayslipHandler) GetAllEmployees(c fiber.Ctx) error {
+	employees, err := h.EmployeeRepo.GetAll()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(models.ErrorResponse{
+			Success: false,
+			Message: "Failed to fetch employees",
+			Errors:  []string{err.Error()},
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(models.EmployeeListResponse{
+		Success: true,
+		Message: "All Monthly payslip fetched successfully",
+		Data:    employees,
+	})
+}
