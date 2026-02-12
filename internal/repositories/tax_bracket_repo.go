@@ -87,3 +87,37 @@ WHERE version = $1
 	}
 	return nil
 }
+
+// GetMaxVersion returns the highest version number across all brackets (active or not)
+func (r *TaxBracketRepository) GetMaxVersion() (int, error) {
+	var version int
+	err := r.DB.QueryRow(`
+SELECT COALESCE(MAX(version), 0)
+FROM tax_brackets
+`).Scan(&version)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get max version: %w", err)
+	}
+	return version, nil
+}
+
+// InsertBrackets inserts a new set of tax brackets with a given version
+func (r *TaxBracketRepository) InsertBrackets(version int, effectiveDate string, isActive bool, brackets []struct{ Min, Max, Rate float64 }) error {
+	tx, err := r.DB.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	for _, b := range brackets {
+		_, err := tx.Exec(`
+INSERT INTO tax_brackets (version, effective_date, min_salary, max_salary, rate, is_active)
+VALUES ($1, $2, $3, $4, $5, $6)
+`, version, effectiveDate, b.Min, b.Max, b.Rate, isActive)
+		if err != nil {
+			return fmt.Errorf("failed to insert tax bracket: %w", err)
+		}
+	}
+
+	return tx.Commit()
+}
