@@ -19,9 +19,9 @@ type ErrorResponse struct {
 }
 
 type SuccessResponse struct {
-	Success bool            `json:"success"`
-	Message string          `json:"message"`
-	Data    PayslipResponse `json:"data"`
+	Success bool        `json:"success"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data"`
 }
 
 type EmployeeResponse struct {
@@ -35,4 +35,8 @@ type EmployeeListResponse struct {
 	Success bool               `json:"success"`
 	Message string             `json:"message"`
 	Data    []EmployeeResponse `json:"data"`
+}
+
+type SendEmailRequest struct {
+	Email string `json:"email" validate:"required,email"`
 }
