@@ -2,3 +2,4 @@
 .devcontainer
 .vscode
 data/tax_brackets.gob
+dist
