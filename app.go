@@ -113,7 +113,19 @@ func runCLI(service *services.PayslipService, employeeRepo *repositories.Employe
 }
 
 func runWeb(cfg *config.Config, service *services.PayslipService, employeeRepo *repositories.EmployeeRepository) {
-	payslipHandler := &handlers.PayslipHandler{Service: service, EmployeeRepo: employeeRepo}
+	emailService := services.NewEmailService(services.SMTPConfig{
+		APIKey:   cfg.EmailServerAPIKey,
+		Host:     cfg.EmailSMTPHost,
+		User:     cfg.EmailSMTPUser,
+		Password: cfg.EmailSMTPPass,
+		MailFrom: cfg.EmailSMTPMailFrom,
+	})
+
+	payslipHandler := &handlers.PayslipHandler{
+		Service:      service,
+		EmployeeRepo: employeeRepo,
+		EmailService: emailService,
+	}
 
 	app := fiber.New()
 
@@ -122,6 +134,7 @@ func runWeb(cfg *config.Config, service *services.PayslipService, employeeRepo *
 
 	app.Post("/gen_monthly_payslip", payslipHandler.GenMonthlyPayslip)
 	app.Get("/employees", payslipHandler.GetAllEmployees)
+	app.Post("/send_email", payslipHandler.SendEmail)
 
 	listenConfig := fiber.ListenConfig{
 		EnablePrefork: cfg.Prefork,
