@@ -7,15 +7,20 @@ import (
 )
 
 type Config struct {
-	AppEnv  string
-	AppPort string
-	AppMode string
-	Prefork bool
-	DBHost  string
-	DBPort  string
-	DBUser  string
-	DBPass  string
-	DBName  string
+	AppEnv      string
+	AppPort     string
+	AppMode     string
+	Prefork     bool
+	DBHost      string
+	DBPort      string
+	DBUser      string
+	DBPass      string
+	DBName      string
+	EmailServerAPIKey string
+	EmailSMTPHost     string
+	EmailSMTPUser     string
+	EmailSMTPPass     string
+	EmailSMTPMailFrom string
 }
 
 func LoadConfig() (*Config, error) {
@@ -62,15 +67,26 @@ func LoadConfig() (*Config, error) {
 		dbName = "edvance"
 	}
 
+	emailServerAPIKey := os.Getenv("EMAIL_SERVER_API_KEY")
+	emailSMTPHost := os.Getenv("EMAIL_SMTP_HOST")
+	emailSMTPUser := os.Getenv("EMAIL_SMTP_USER")
+	emailSMTPPass := os.Getenv("EMAIL_SMTP_PASS")
+	emailSMTPMailFrom := os.Getenv("EMAIL_SMTP_MAIL_FROM")
+
 	return &Config{
-		AppEnv:  appEnv,
-		AppPort: appPort,
-		AppMode: appMode,
-		Prefork: prefork,
-		DBHost:  dbHost,
-		DBPort:  dbPort,
-		DBUser:  dbUser,
-		DBPass:  dbPass,
-		DBName:  dbName,
+		AppEnv:            appEnv,
+		AppPort:           appPort,
+		AppMode:           appMode,
+		Prefork:           prefork,
+		DBHost:            dbHost,
+		DBPort:            dbPort,
+		DBUser:            dbUser,
+		DBPass:            dbPass,
+		DBName:            dbName,
+		EmailServerAPIKey: emailServerAPIKey,
+		EmailSMTPHost:     emailSMTPHost,
+		EmailSMTPUser:     emailSMTPUser,
+		EmailSMTPPass:     emailSMTPPass,
+		EmailSMTPMailFrom: emailSMTPMailFrom,
 	}, nil
 }
