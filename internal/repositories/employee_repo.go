@@ -3,6 +3,8 @@ package repositories
 import (
 	"database/sql"
 	"fmt"
+
+	"edvance-assessment/internal/models"
 )
 
 // EmployeeRepository handles database operations for employees
@@ -29,4 +31,36 @@ func (r *EmployeeRepository) Upsert(name string, annualSalary, monthlyIncomeTax 
 		return fmt.Errorf("failed to upsert employee %s: %w", name, err)
 	}
 	return nil
+}
+
+// GetAll fetches all employees from the database
+func (r *EmployeeRepository) GetAll() ([]models.EmployeeResponse, error) {
+	rows, err := r.DB.Query(`
+		SELECT
+			TO_CHAR(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS time_stamp,
+			name,
+			annual_salary,
+			monthly_income_tax
+		FROM employee
+		ORDER BY updated_at DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query employees: %w", err)
+	}
+	defer rows.Close()
+
+	var employees []models.EmployeeResponse
+	for rows.Next() {
+		var e models.EmployeeResponse
+		if err := rows.Scan(&e.TimeStamp, &e.EmployeeName, &e.AnnualSalary, &e.MonthlyIncomeTax); err != nil {
+			return nil, fmt.Errorf("failed to scan employee: %w", err)
+		}
+		employees = append(employees, e)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("row iteration error: %w", err)
+	}
+
+	return employees, nil
 }
