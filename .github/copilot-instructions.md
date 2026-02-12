@@ -18,7 +18,7 @@ internal/
   services/             # Business logic (PayslipService, EmailService)
   handlers/             # HTTP handler (PayslipHandler) + CLI handler (CLIHandler)
   models/               # Request/response DTOs
-pkg/                    # Shared utilities (validator, GOB storage, file watcher)
+pkg/                    # Shared utilities (validator, GOB storage)
 data/                   # Runtime GOB cache (ephemeral, deleted on shutdown)
 ```
 
@@ -46,12 +46,15 @@ employeeRepo := repositories.NewEmployeeRepository(db)
 strategy := &domains.ProgressiveTaxStrategy{Brackets: brackets}
 service := services.NewPayslipService(strategy)
 emailService := services.NewEmailService(services.SMTPConfig{...})
-handler := &handlers.PayslipHandler{Service: service, EmployeeRepo: employeeRepo, EmailService: emailService}
+handler := &handlers.PayslipHandler{
+    Service: service, EmployeeRepo: employeeRepo, EmailService: emailService,
+    TaxBracketRepo: repo, Strategy: strategy,
+}
 ```
 
 ### Repository Pattern
 
-`TaxBracketRepository` wraps `*sql.DB`. Key methods: `GetActiveBrackets()`, `GetActiveByVersion(v)`, `GetLatestVersion()`, `DeactivateVersion(v)`.
+`TaxBracketRepository` wraps `*sql.DB`. Key methods: `GetActiveBrackets()`, `GetActiveByVersion(v)`, `GetLatestVersion()`, `DeactivateVersion(v)`, `GetMaxVersion()`, `InsertBrackets()` (transactional), `DeactivateAllVersions()`, `ActivateVersion()` (transactional: deactivate all → activate target), `VersionExists()`.
 
 `EmployeeRepository` wraps `*sql.DB`. Key method: `Upsert(name, annualSalary, monthlyIncomeTax)` — uses `INSERT ... ON CONFLICT (name) DO UPDATE` for upsert.
 
@@ -59,7 +62,7 @@ handler := &handlers.PayslipHandler{Service: service, EmployeeRepo: employeeRepo
 
 App runs as web server or CLI based on `APP_MODE` env variable:
 
-- `web` (default) — Fiber HTTP server with `POST /gen_monthly_payslip`, `GET /employees`, `POST /send_email`
+- `web` (default) — Fiber HTTP server with `POST /gen_monthly_payslip`, `GET /employees`, `POST /send_email`, `POST /set_tax_brackets`, `POST /set_tax_brackets_active`
 - `cli` — Prompts user for `name` and `annual salary`, prints payslip to console
 
 Both modes use the same `PayslipService`, validation via `pkg.ValidateStruct()`, and save employee data to DB via `EmployeeRepository.Upsert()`.
@@ -80,9 +83,17 @@ Both modes use the same `PayslipService`, validation via `pkg.ValidateStruct()`,
 - `is_active` (bool) — soft delete; `DeactivateVersion()` sets FALSE
 - Partial index on `(version, is_active) WHERE is_active = TRUE`
 
-### GOB File Cache + Hot Reload
+### GOB File Cache + Direct Strategy Update
 
-On startup: DB brackets → `pkg.SaveToGob()` → `data/tax_brackets.gob`. A `fsnotify` watcher goroutine auto-reloads brackets when the GOB file changes. File is deleted on graceful shutdown.
+On startup: DB brackets → `pkg.SaveToGob()` → `data/tax_brackets.gob`. File is deleted on graceful shutdown.
+
+When tax brackets change at runtime (via `SetTaxBrackets` or `SetTaxBracketsActive`), the handler updates `strategy.Brackets` directly in memory and saves GOB as backup. No file watcher is used — the `Strategy` pointer on `PayslipHandler` enables direct mutation.
+
+### Tax Bracket Management
+
+`POST /set_tax_brackets` — creates a new versioned set of brackets. Auto-increments version via `GetMaxVersion() + 1`. If `is_active` is true, auto-deactivates all other versions, then activates the new one, refreshes strategy + GOB.
+
+`POST /set_tax_brackets_active` — activates an existing version. Validates version exists via `VersionExists()`, calls `ActivateVersion()` (transactional: deactivate all → activate target), refreshes strategy + GOB.
 
 ### Email Service (AWS SES SMTP)
 
@@ -106,6 +117,10 @@ In `internal/models/`:
 - `EmployeeResponse` — `TimeStamp`, `EmployeeName`, `AnnualSalary`, `MonthlyIncomeTax`
 - `EmployeeListResponse` — envelope: `Success`, `Message`, `Data` (`[]EmployeeResponse`)
 - `SendEmailRequest` — `Email` with `required,email` validation
+- `TaxBracketInput` — `Min` (`gte=0`), `Max` (`gtfield=Min`), `Rate` (`gte=0,lte=1`)
+- `SetTaxBracketsRequest` — `Brackets` (required), `EffectiveDate` (optional, defaults to `now()`), `IsActive` (`*bool`, defaults to false)
+- `SetTaxBracketsResponse` — `Version`, `EffectiveDate`, `IsActive`, `Brackets`
+- `SetTaxBracketsActiveRequest` — `Version` (`required,gt=0`)
 
 ### Validation
 
@@ -118,6 +133,7 @@ All money values rounded to 2 decimal places: `math.Round(x*100) / 100`.
 ## Development
 
 - **Run**: `go run app.go` (requires `.env` — copy from `.env.sample`, and PostgreSQL running)
+- **Build**: `bash build.sh -w` (Windows) or `bash build.sh -l` (Linux) — outputs to `dist/`
 - **Test**: `go test -v ./...`
 - **Lint**: `golangci-lint run`
 - **Migrations**: Auto-run on startup via `config.RunMigrations()` — add new `.sql` files in `migrations/`
