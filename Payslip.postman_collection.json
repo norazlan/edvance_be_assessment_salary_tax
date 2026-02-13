@@ -1,0 +1,160 @@
+{
+  "info": {
+    "name": "Payslip",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Monthly Payslip",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"name\": \"Ali\",\r\n    \"salary\": 60000\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{host_url}}/gen_monthly_payslip",
+          "host": [
+            "{{host_url}}"
+          ],
+          "path": [
+            "gen_monthly_payslip"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Employees",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{host_url}}/employees",
+          "host": [
+            "{{host_url}}"
+          ],
+          "path": [
+            "employees"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Send Email",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"email\": \"nor.azlan.idris@gmail.com\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{host_url}}/send_email",
+          "host": [
+            "{{host_url}}"
+          ],
+          "path": [
+            "send_email"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Set New Tax Brackets",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"brackets\": [\r\n    { \"min\": 0, \"max\": 25000, \"rate\": 0 },\r\n    { \"min\": 25001, \"max\": 50000, \"rate\": 0.05 },\r\n    { \"min\": 50001, \"max\": 100000, \"rate\": 0.15 },\r\n    { \"min\": 100001, \"max\": 200000, \"rate\": 0.25 },\r\n    { \"min\": 200001, \"max\": 999999999, \"rate\": 0.35 }\r\n  ],\r\n  \"effective_date\": \"2027-01-01\",\r\n  \"is_active\": false\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{host_url}}/set_tax_brackets",
+          "host": [
+            "{{host_url}}"
+          ],
+          "path": [
+            "set_tax_brackets"
+          ]
+        },
+        "description": "\"effective_date\" and \"is_active\" is optional. by default \"is_active\" is set to 'false' if not provided and \"effective_date\" set to current time."
+      },
+      "response": []
+    },
+    {
+      "name": "Set Tax Brackets Version Active",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"version\": 1\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{host_url}}/set_tax_brackets_active",
+          "host": [
+            "{{host_url}}"
+          ],
+          "path": [
+            "set_tax_brackets_active"
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "host_url",
+      "value": "http://localhost:3000"
+    }
+  ]
+}
